@@ -3,10 +3,11 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <linux/types.h>
-#include <linux/netfilter.h>		/* for NF_ACCEPT */
+#include <linux/netfilter.h>        /* for NF_ACCEPT */
 #include <errno.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
@@ -72,35 +73,23 @@ static u_int32_t print_pkt (struct nfq_data *tb)
         printf("payload_len=%d ", ret);
         dump(data, ret);
 
-        char get[] = {'G', 'E', 'T'};
-        char post[] = {'P', 'O', 'S', 'T'};
-
         iphdr *iph = (iphdr*)data;
         tcphdr *tcph = (tcphdr*)(data+iph->ihl*4);
-        unsigned char *tcphead = data + iph->ihl*4;
-        int tcpheadlen = ((*(tcphead)) & 0xF0) >> 4;
-        tcpheadlen *= 4;
+        const unsigned char *tcphead = data + iph->ihl*4;
+        int tcpheadlen = ((*(tcphead + 12)) & 0xF0) >> 4;
+        tcpheadlen = tcphealen * 4;
         int totalsize = iph->ihl*4 + tcpheadlen;
         unsigned char *payload = data + totalsize;
 
         if(iph->protocol == 6 && htons(tcph->dest) == 80){
-            if((payload[0] == get[0] && payload[1] == get[1] && payload[2] == get[2])){
+            if((payload[0] == 'G' && payload[1] == 'E' && payload[2] == 'T') ||
+                    (payload[0] == 'P' && payload[1] == 'O' && payload[2] == 'S' && payload[3] == 'T')){
                 for (int i = 0; i < strlen(URL); i++)
                     if(payload[22+i] == URL[i]){
                         return NF_DROP;
                     }
             }
         }
-        if(iph->protocol == 6 && htons(tcph->dest) == 80){
-            if((payload[0] == post[0] && payload[1] == post[1] && payload[2] == post[2] && payload[3] == post[3])){
-                for (int i = 0; i < strlen(URL); i++)
-                    if(payload[22+i] == URL[i]){
-                        return NF_DROP;
-                    }
-            }
-        }
-
-        
     }
     fputc('\n', stdout);
 
